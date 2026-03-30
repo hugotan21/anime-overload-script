@@ -697,7 +697,7 @@ cardBtn.MouseButton1Click:Connect(function()
         contractScroll:ClearAllChildren()
         normalScroll:ClearAllChildren()
 
-        makeHeader(contractScroll,"Contracts Card Priority ( press enter to confirm ) ",Color3.fromRGB(255,100,100))
+        makeHeader(contractScroll,"Contracts Card Priority (Press Enter to Confirm)",Color3.fromRGB(255,100,100))
         makeHeader(normalScroll,"Normal Card Priority",Color3.fromRGB(100,150,255))
 
         populate(contractScroll,contractCards)
