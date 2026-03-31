@@ -12,13 +12,23 @@ local placedTowers = workspace:WaitForChild("placedTowers")
 local syncNet = require(game.ReplicatedStorage.gameClient.net.sync)
 local towersNet = require(game.ReplicatedStorage.gameClient.net.towers)
 
-
+---------------------------------------------------------------------
+-- CARD GUI PATH
+---------------------------------------------------------------------
+local cardGuiFolder = game:GetService("Players")
+    .LocalPlayer
+    .PlayerGui
+    :WaitForChild("cardModifiers")
+    :WaitForChild("container")
+    :WaitForChild("content")
+    :WaitForChild("cards")
 ---------------------------------------------------------------------
 -- 🧠 STATE
 ---------------------------------------------------------------------
 local recording = false
 local autofarm = false
 local running = false
+local autoPickCards = false
 local stopSignal = false
 local lastStatus = false
 
@@ -325,7 +335,7 @@ end)
 local gui = Instance.new("ScreenGui", player.PlayerGui)
 
 local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0, 200, 0, 160)
+frame.Size = UDim2.new(0, 200, 0, 200)
 frame.Position = UDim2.new(0.1, 0, 0.3, 0)
 frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
 frame.Active = true
@@ -340,6 +350,11 @@ local autoBtn = Instance.new("TextButton", frame)
 autoBtn.Size = UDim2.new(1, -10, 0, 40)
 autoBtn.Position = UDim2.new(0, 5, 0, 55)
 autoBtn.Text = "Autofarm: OFF"
+
+local cardToggleBtn = Instance.new("TextButton", frame)
+cardToggleBtn.Size = UDim2.new(1, -10, 0, 30)
+cardToggleBtn.Position = UDim2.new(0, 5, 0, 105)
+cardToggleBtn.Text = "Auto Pick Cards: OFF"
 
 ---------------------------------------------------------------------
 -- 🔘 BUTTONS
@@ -365,7 +380,20 @@ autoBtn.MouseButton1Click:Connect(function()
         print("🛑 Stopped")
     end
 end)
----------------------------------------------------------------------
+
+cardToggleBtn.MouseButton1Click:Connect(function()
+
+    autoPickCards = not autoPickCards
+
+    if autoPickCards then
+        cardToggleBtn.Text = "Auto Pick Cards: ON"
+    else
+        cardToggleBtn.Text = "Auto Pick Cards: OFF"
+    end
+
+end)
+
+-------------------------------------
 -- 🔘 edit proririty
 ---------------------------------------------------------------------
 ---------------------------------------------------------------------
@@ -551,6 +579,14 @@ end
 getgenv().priorityContracts = {}
 getgenv().priorityNormal = {}
 
+for _, v in ipairs(contractCards) do
+    getgenv().priorityContracts[v.name] = v.priority
+end
+
+for _, v in ipairs(normalCards) do
+    getgenv().priorityNormal[v.name] = v.priority
+end
+
 ---------------------------------------------------------------------
 -- EDITOR WINDOW
 ---------------------------------------------------------------------
@@ -708,6 +744,30 @@ cardBtn.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------------------------------
+-- WAIT FOR CARD GUI TO LOAD
+---------------------------------------------------------------------
+local function waitForCards()
+
+    repeat
+        task.wait()
+
+        local count = 0
+
+        for _, v in pairs(cardGuiFolder:GetChildren()) do
+            if not v:IsA("UIListLayout") then
+                count += 1
+            end
+        end
+
+        if count >= 3 then
+            task.wait(0.5)
+            return
+        end
+
+    until false
+
+end
+---------------------------------------------------------------------
 -- AUTO CARD PICKER
 ---------------------------------------------------------------------
 
@@ -715,19 +775,42 @@ local gm = require(game:GetService("ReplicatedStorage").gameClient.net.gamemodes
 
 gm.showInfCards.on(function(cards)
 
+    if not autoPickCards then
+        return
+    end
+
+    waitForCards()
+
     local bestCard = nil
     local bestPriority = math.huge
 
-    for _, card in ipairs(cards) do
+print("---------- CARD PICK DEBUG ----------")
 
-        local p = getgenv().priorityContracts[card]
+for _, card in ipairs(cards) do
 
-        if p and p < bestPriority then
-            bestPriority = p
-            bestCard = card
-        end
+    local p =
 
+    getgenv().priorityContracts[card] or
+    getgenv().priorityNormal[card]
+
+    print("Card offered:", card)
+
+    if p then
+        print("Priority:", p)
+    else
+        print("Priority: NONE (not in priority table)")
     end
+
+    if p and p < bestPriority then
+        print("-> New best card found:", card)
+
+        bestPriority = p
+        bestCard = card
+    end
+
+    print("-------------------------------------")
+
+end
 
     if bestCard then
         print("🔥 Picking:", bestCard)
