@@ -33,6 +33,21 @@ local stopSignal = false
 local lastStatus = false
 
 ---------------------------------------------------------------------
+-- 💾 RECORDING SLOT STATE
+---------------------------------------------------------------------
+local RECORDS_FOLDER = "tower_records"
+if not isfolder(RECORDS_FOLDER) then
+    makefolder(RECORDS_FOLDER)
+end
+
+local activeRecordName = "default"
+local activeRecordFile = RECORDS_FOLDER .. "/default.json"
+if not isfile(activeRecordFile) then
+    writefile(activeRecordFile, "[]")
+end
+local selectedRecordName = "default"
+
+---------------------------------------------------------------------
 -- 🧼 YOUR PRETTY JSON (UNCHANGED)
 ---------------------------------------------------------------------
 local function prettyJSON(data)
@@ -93,6 +108,69 @@ local function isMine(tower)
 end
 
 ---------------------------------------------------------------------
+-- 💾 RECORDING SLOT HELPERS
+---------------------------------------------------------------------
+local function sanitizeRecordName(name)
+    name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    name = name:gsub("[<>:\"/\\|%?%*]", "_")
+    if name == "" then
+        name = "default"
+    end
+    return name
+end
+
+local function getRecordFile(name)
+    name = sanitizeRecordName(name)
+    return RECORDS_FOLDER .. "/" .. name .. ".json", name
+end
+
+local function setActiveRecord(name)
+    local file, cleanName = getRecordFile(name)
+    activeRecordName = cleanName
+    activeRecordFile = file
+    selectedRecordName = cleanName
+end
+
+local function listRecordNames()
+    local results = {}
+
+    if listfiles then
+        for _, path in ipairs(listfiles(RECORDS_FOLDER)) do
+            local fileName = path:match("([^/\\]+)%.json$")
+            if fileName then
+                table.insert(results, fileName)
+            end
+        end
+    end
+
+    table.sort(results, function(a, b)
+        return a:lower() < b:lower()
+    end)
+
+    return results
+end
+
+local function readActiveRecordData()
+    if not isfile(activeRecordFile) then
+        return {}
+    end
+
+    local ok, data = pcall(function()
+        return HttpService:JSONDecode(readfile(activeRecordFile))
+    end)
+
+    if ok and type(data) == "table" then
+        return data
+    end
+
+    return {}
+end
+
+local function saveTableToActiveRecord(data)
+    writefile(activeRecordFile, prettyJSON(data))
+end
+
+---------------------------------------------------------------------
 -- 📦 RECORDER (UNCHANGED)
 ---------------------------------------------------------------------
 local saveData = {}
@@ -127,7 +205,7 @@ placedTowers.ChildAdded:Connect(function(tower)
         }
 
         table.insert(saveData, data)
-        writefile("tower_record.json", prettyJSON(saveData))
+        writefile(activeRecordFile, prettyJSON(saveData))
     end
 end)
 
@@ -135,7 +213,7 @@ end)
 -- 🚀 AUTOPLACE (UNCHANGED + STOP SUPPORT)
 ---------------------------------------------------------------------
 local function runAutoplace()
-    local data = HttpService:JSONDecode(readfile("tower_record.json"))
+    local data = readActiveRecordData()
 
     local function isTowerPlaced(name, pos)
         for _, tower in pairs(workspace.placedTowers:GetChildren()) do
@@ -175,7 +253,7 @@ end
 -- 🔼 AUTOUPGRADE (UNCHANGED + STOP SUPPORT)
 ---------------------------------------------------------------------
 local function runAutoupgrade()
-    local data = HttpService:JSONDecode(readfile("tower_record.json"))
+    local data = readActiveRecordData()
     local hitboxes = workspace:WaitForChild("hitboxes")
     local upgradeText = player.PlayerGui.upgradeGui.mainFrame.content.upgrade.upgrades
 
@@ -335,37 +413,295 @@ end)
 local gui = Instance.new("ScreenGui", player.PlayerGui)
 
 local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0, 200, 0, 200)
+frame.Size = UDim2.new(0, 200, 0, 290)
 frame.Position = UDim2.new(0.1, 0, 0.3, 0)
 frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
 frame.Active = true
 frame.Draggable = true
 
+local openRecordsBtn = Instance.new("TextButton", frame)
+openRecordsBtn.Size = UDim2.new(1, -10, 0, 30)
+openRecordsBtn.Position = UDim2.new(0, 5, 0, 5)
+openRecordsBtn.Text = "Open Recordings"
+
+local currentConfigLabel = Instance.new("TextLabel", frame)
+currentConfigLabel.Size = UDim2.new(1, -10, 0, 20)
+currentConfigLabel.Position = UDim2.new(0, 5, 0, 40)
+currentConfigLabel.BackgroundTransparency = 1
+currentConfigLabel.TextColor3 = Color3.fromRGB(255,255,255)
+currentConfigLabel.TextXAlignment = Enum.TextXAlignment.Left
+currentConfigLabel.Text = "Config: " .. activeRecordName
+
 local recordBtn = Instance.new("TextButton", frame)
 recordBtn.Size = UDim2.new(1, -10, 0, 40)
-recordBtn.Position = UDim2.new(0, 5, 0, 5)
+recordBtn.Position = UDim2.new(0, 5, 0, 65)
 recordBtn.Text = "Recording: OFF"
 
 local autoBtn = Instance.new("TextButton", frame)
 autoBtn.Size = UDim2.new(1, -10, 0, 40)
-autoBtn.Position = UDim2.new(0, 5, 0, 55)
+autoBtn.Position = UDim2.new(0, 5, 0, 115)
 autoBtn.Text = "Autofarm: OFF"
 
 local cardToggleBtn = Instance.new("TextButton", frame)
 cardToggleBtn.Size = UDim2.new(1, -10, 0, 30)
-cardToggleBtn.Position = UDim2.new(0, 5, 0, 105)
+cardToggleBtn.Position = UDim2.new(0, 5, 0, 165)
 cardToggleBtn.Text = "Auto Pick Cards: OFF"
 
 ---------------------------------------------------------------------
+-- 💾 RECORDINGS WINDOW
+---------------------------------------------------------------------
+local recordsFrame = Instance.new("Frame", gui)
+recordsFrame.Size = UDim2.new(0, 260, 0, 360)
+recordsFrame.Position = UDim2.new(0.32, 0, 0.3, 0)
+recordsFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+recordsFrame.Visible = false
+recordsFrame.Active = true
+recordsFrame.Draggable = true
+
+local activeSlotLabel = Instance.new("TextLabel", recordsFrame)
+activeSlotLabel.Size = UDim2.new(1, -10, 0, 20)
+activeSlotLabel.Position = UDim2.new(0, 5, 0, 5)
+activeSlotLabel.BackgroundTransparency = 1
+activeSlotLabel.TextColor3 = Color3.fromRGB(0,255,150)
+activeSlotLabel.TextXAlignment = Enum.TextXAlignment.Left
+activeSlotLabel.Text = "Active: " .. activeRecordName
+
+local slotNameBox = Instance.new("TextBox", recordsFrame)
+slotNameBox.Size = UDim2.new(1, -10, 0, 30)
+slotNameBox.Position = UDim2.new(0, 5, 0, 30)
+slotNameBox.Text = activeRecordName
+slotNameBox.PlaceholderText = "Enter slot name"
+slotNameBox.ClearTextOnFocus = false
+slotNameBox.BackgroundColor3 = Color3.fromRGB(45,45,45)
+slotNameBox.TextColor3 = Color3.fromRGB(255,255,255)
+
+local loadSlotBtn = Instance.new("TextButton", recordsFrame)
+loadSlotBtn.Size = UDim2.new(1, -10, 0, 30)
+loadSlotBtn.Position = UDim2.new(0, 5, 0, 70)
+loadSlotBtn.Text = "Load"
+
+local refreshSlotBtn = Instance.new("TextButton", recordsFrame)
+refreshSlotBtn.Size = UDim2.new(1, -10, 0, 30)
+refreshSlotBtn.Position = UDim2.new(0, 5, 0, 105)
+refreshSlotBtn.Text = "Refresh"
+
+local newRecordingBtn = Instance.new("TextButton", recordsFrame)
+newRecordingBtn.Size = UDim2.new(1, -10, 0, 30)
+newRecordingBtn.Position = UDim2.new(0, 5, 0, 140)
+newRecordingBtn.Text = "New Recording"
+
+local renameBtn = Instance.new("TextButton", recordsFrame)
+renameBtn.Size = UDim2.new(1, -10, 0, 30)
+renameBtn.Position = UDim2.new(0, 5, 0, 175)
+renameBtn.Text = "Rename Selected"
+
+local deleteBtn = Instance.new("TextButton", recordsFrame)
+deleteBtn.Size = UDim2.new(1, -10, 0, 30)
+deleteBtn.Position = UDim2.new(0, 5, 0, 210)
+deleteBtn.Text = "Delete Selected"
+
+local slotList = Instance.new("ScrollingFrame", recordsFrame)
+slotList.Size = UDim2.new(1, -10, 1, -250)
+slotList.Position = UDim2.new(0, 5, 0, 245)
+slotList.BackgroundColor3 = Color3.fromRGB(40,40,40)
+slotList.CanvasSize = UDim2.new(0,0,0,0)
+slotList.ScrollBarThickness = 6
+
+local layout = Instance.new("UIListLayout")
+layout.Parent = slotList
+layout.Padding = UDim.new(0, 5)
+
+layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    slotList.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+end)
+
+local function updateConfigLabels()
+    currentConfigLabel.Text = "Config: " .. activeRecordName
+    activeSlotLabel.Text = "Active: " .. activeRecordName
+end
+
+local function refreshSlotList()
+
+    local names = listRecordNames()
+    
+    print("FILES FOUND:", #names)
+    for _, v in ipairs(names) do
+        print(" -", v)
+    end
+    -- clear old buttons
+    for _, child in ipairs(slotList:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+
+    
+
+    for _, name in ipairs(names) do
+
+        local btn = Instance.new("TextButton")
+        btn.Parent = slotList
+        btn.Size = UDim2.new(1, -10, 0, 30)
+        btn.Text = name
+        btn.TextColor3 = Color3.fromRGB(255,255,255)
+        btn.BackgroundColor3 = Color3.fromRGB(55,55,55)
+
+        -- highlight active slot
+        if name == activeRecordName then
+            btn.BackgroundColor3 = Color3.fromRGB(60,120,60)
+        end
+
+        -- CLICK HANDLER
+        btn.MouseButton1Click:Connect(function()
+
+            selectedRecordName = name
+            slotNameBox.Text = name
+
+            -- update highlight
+            for _, b in ipairs(slotList:GetChildren()) do
+                if b:IsA("TextButton") then
+                    b.BackgroundColor3 = Color3.fromRGB(55,55,55)
+                end
+            end
+
+            btn.BackgroundColor3 = Color3.fromRGB(120,120,60)
+
+        end)
+    end
+
+    updateConfigLabels()
+end
+---------------------------------------------------------------------
 -- 🔘 BUTTONS
 ---------------------------------------------------------------------
+
+openRecordsBtn.MouseButton1Click:Connect(function()
+    recordsFrame.Visible = not recordsFrame.Visible
+
+    if recordsFrame.Visible then
+        refreshSlotList()
+    end
+end)
+
 recordBtn.MouseButton1Click:Connect(function()
     recording = not recording
     recordBtn.Text = "Recording: " .. (recording and "ON" or "OFF")
 
     if recording then
         saveData = {}
+        writefile(activeRecordFile, prettyJSON(saveData))
+        updateConfigLabels()
     end
+end)
+
+loadSlotBtn.MouseButton1Click:Connect(function()
+
+    if not selectedRecordName then
+        warn("No recording selected")
+        return
+    end
+
+    setActiveRecord(selectedRecordName)
+    saveData = readActiveRecordData()
+
+    slotNameBox.Text = selectedRecordName
+
+    updateConfigLabels()
+    refreshSlotList()
+
+end)
+
+refreshSlotBtn.MouseButton1Click:Connect(function()
+    refreshSlotList()
+end)
+
+newRecordingBtn.MouseButton1Click:Connect(function()
+    local base = "recording"
+    local i = 1
+    local name = base
+    local file = RECORDS_FOLDER .. "/" .. name .. ".json"
+
+    while isfile(file) do
+        name = base .. "_" .. i
+        file = RECORDS_FOLDER .. "/" .. name .. ".json"
+        i += 1
+    end
+
+    writefile(file, "[]")
+    setActiveRecord(name)
+    saveData = {}
+    slotNameBox.Text = name
+    updateConfigLabels()
+    refreshSlotList()
+end)
+
+renameBtn.MouseButton1Click:Connect(function()
+    if not selectedRecordName then
+        warn("Select a recording first")
+        return
+    end
+
+    local oldFile, oldName = getRecordFile(selectedRecordName)
+    local newFile, newName = getRecordFile(slotNameBox.Text)
+
+    if oldName == newName then
+        return
+    end
+
+    if not isfile(oldFile) then
+        warn("Selected recording does not exist")
+        return
+    end
+
+    if isfile(newFile) then
+        warn("A recording with that name already exists")
+        return
+    end
+
+    writefile(newFile, readfile(oldFile))
+    delfile(oldFile)
+
+    if activeRecordName == oldName then
+        setActiveRecord(newName)
+        saveData = readActiveRecordData()
+    else
+        selectedRecordName = newName
+    end
+
+    slotNameBox.Text = newName
+    updateConfigLabels()
+    refreshSlotList()
+end)
+
+deleteBtn.MouseButton1Click:Connect(function()
+    if not selectedRecordName then
+        warn("Select a recording first")
+        return
+    end
+
+    local file, cleanName = getRecordFile(selectedRecordName)
+
+    if not isfile(file) then
+        warn("Recording does not exist")
+        return
+    end
+
+    delfile(file)
+
+    if activeRecordName == cleanName then
+        setActiveRecord("default")
+        if not isfile(activeRecordFile) then
+            writefile(activeRecordFile, "[]")
+        end
+        saveData = readActiveRecordData()
+        slotNameBox.Text = activeRecordName
+    else
+        slotNameBox.Text = activeRecordName
+        selectedRecordName = activeRecordName
+    end
+
+    updateConfigLabels()
+    refreshSlotList()
 end)
 
 autoBtn.MouseButton1Click:Connect(function()
@@ -392,6 +728,8 @@ cardToggleBtn.MouseButton1Click:Connect(function()
     end
 
 end)
+
+
 
 -------------------------------------
 -- 🔘 edit proririty
@@ -437,7 +775,7 @@ local function loadEditor()
         if v:IsA("Frame") then v:Destroy() end
     end
 
-    loadedData = HttpService:JSONDecode(readfile("tower_record.json"))
+    loadedData = readActiveRecordData()
 
     local y = 0
     for _, tower in ipairs(loadedData) do
@@ -499,8 +837,8 @@ editBtn.MouseButton1Click:Connect(function()
 end)
 
 saveBtn.MouseButton1Click:Connect(function()
-    writefile("tower_record.json", prettyJSON(loadedData))
-    print("💾 Priorities saved")
+    saveTableToActiveRecord(loadedData)
+    print("💾 Priorities saved to:", activeRecordName)
 end)
 
 local VirtualInputManager = game:GetService("VirtualInputManager")
