@@ -1,5 +1,3 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/krissisis898-dev/Roblox-/refs/heads/main/Roblox%20Anti%20AFK-Script%20(updatet)", true))()
-
 ---------------------------------------------------------------------
 -- 🧠 SERVICES
 ---------------------------------------------------------------------
@@ -11,6 +9,16 @@ local placedTowers = workspace:WaitForChild("placedTowers")
 
 local syncNet = require(game.ReplicatedStorage.gameClient.net.sync)
 local towersNet = require(game.ReplicatedStorage.gameClient.net.towers)
+
+---------------------------------------------------------------------
+-- AUTO AFK
+---------------------------------------------------------------------
+local VU = game:GetService("VirtualUser")
+game:GetService("Players").LocalPlayer.Idled:Connect(function()
+    VU:CaptureController()
+    VU:ClickButton2(Vector2.new(0,0))
+end)
+print("Anti-AFK is active.")
 
 ---------------------------------------------------------------------
 -- CARD GUI PATH
