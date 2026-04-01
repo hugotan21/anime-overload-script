@@ -419,6 +419,7 @@ end)
 -- 🖥️ UI
 ---------------------------------------------------------------------
 local gui = Instance.new("ScreenGui", player.PlayerGui)
+gui.DisplayOrder = 999
 
 local frame = Instance.new("Frame", gui)
 frame.Size = UDim2.new(0, 200, 0, 290)
